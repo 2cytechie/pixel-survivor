@@ -48,7 +48,7 @@ export class Player extends Phaser.GameObjects.Sprite {
   private readonly HIT_FLASH_DURATION: number = 150;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'player');
+    super(scene, x, y, 'player_sheet', 0);
 
     this.setScale(GameConfig.PIXEL_SCALE);
     scene.add.existing(this);
@@ -70,11 +70,15 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     // 设置物理体用于碰撞检测
     this.setOrigin(0.5, 0.5);
+
+    // 播放待机动画
+    this.play('player_idle');
   }
 
   update(_time: number, delta: number): void {
     // 应用移动
-    if (this.vx !== 0 || this.vy !== 0) {
+    const isMoving = this.vx !== 0 || this.vy !== 0;
+    if (isMoving) {
       // 归一化方向向量
       const len = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
       if (len > 0) {
@@ -82,6 +86,23 @@ export class Player extends Phaser.GameObjects.Sprite {
         const ny = this.vy / len;
         this.x += nx * this.speed * (delta / 1000);
         this.y += ny * this.speed * (delta / 1000);
+      }
+
+      // 切换到行走动画
+      if (this.anims.currentAnim?.key !== 'player_walk') {
+        this.play('player_walk');
+      }
+
+      // 根据移动方向翻转精灵
+      if (this.vx < 0) {
+        this.setFlipX(true);
+      } else if (this.vx > 0) {
+        this.setFlipX(false);
+      }
+    } else {
+      // 切换到待机动画
+      if (this.anims.currentAnim?.key !== 'player_idle') {
+        this.play('player_idle');
       }
     }
 
@@ -98,7 +119,7 @@ export class Player extends Phaser.GameObjects.Sprite {
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
       if (this.hitFlashTimer <= 0) {
-        this.setTexture('player');
+        this.clearTint();
       }
     }
   }
@@ -119,7 +140,7 @@ export class Player extends Phaser.GameObjects.Sprite {
 
     // 受伤闪烁效果
     this.hitFlashTimer = this.HIT_FLASH_DURATION;
-    this.setTexture('player_hit');
+    this.setTint(0xff4444);
   }
 
   heal(amount: number): void {

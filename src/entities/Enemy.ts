@@ -34,7 +34,10 @@ export class Enemy extends Phaser.GameObjects.Sprite {
   private preferredDistance: number = 150;
 
   constructor(scene: Phaser.Scene, x: number, y: number, data: EnemyData) {
-    super(scene, x, y, data.type);
+    // Use spritesheet texture and animation key based on enemy type
+    const sheetKey = `${data.type}_sheet`;
+    const animKey = `${data.type}_move`;
+    super(scene, x, y, sheetKey, 0);
 
     this.setScale(GameConfig.PIXEL_SCALE);
     scene.add.existing(this);
@@ -51,6 +54,9 @@ export class Enemy extends Phaser.GameObjects.Sprite {
     this.projectileSpeed = data.projectileSpeed ?? 0;
 
     this.setOrigin(0.5, 0.5);
+
+    // Play movement animation
+    this.play(animKey);
   }
 
   takeDamage(amount: number, scene: Phaser.Scene): boolean {

@@ -638,7 +638,6 @@ export class GameScene extends Phaser.Scene {
     scaledData.damage = Math.floor(data.damage * (1 + this.gameTime / GameConfig.LEVEL.DURATION));
 
     const enemy = new Enemy(this, x, y, scaledData);
-    enemy.setTexture(`enemy_${enemyType}`);
     enemy.setDepth(5);
 
     this.enemies.push(enemy);
