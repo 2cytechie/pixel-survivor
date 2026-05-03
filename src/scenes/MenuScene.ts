@@ -6,6 +6,51 @@ import {
 } from '../config/GameData';
 import { AchievementManager } from '../systems/AchievementManager';
 
+// ─── UI Config ───────────────────────────────────────────
+interface SpacingConfig {
+  xl: number;
+  l: number;
+  m: number;
+  s: number;
+  xs: number;
+}
+
+interface FontConfig {
+  h1: number;
+  h2: number;
+  h3: number;
+  body: number;
+  caption: number;
+}
+
+interface UIConfig {
+  isDesktop: boolean;
+  spacing: SpacingConfig;
+  font: FontConfig;
+  btnWidth: number;
+  btnHeight: number;
+  modeCardW: number;
+  modeCardH: number;
+  charCardW: number;
+  charCardH: number;
+  cardGap: number;
+  previewScale: number;
+}
+
+// ─── Colors ──────────────────────────────────────────────
+const COLORS = {
+  title: '#ffcc44',
+  subtitle: '#ffffff',
+  body: '#aaaaaa',
+  caption: '#888888',
+  btnPrimary: 0x44aaff,
+  btnSecondary: 0x888888,
+  btnAccent: 0x44ff44,
+  cardBg: 0x1a1a3e,
+  cardBgSelected: 0x3a3a7e,
+  panelBg: 0x2a2a5e,
+} as const;
+
 export class MenuScene extends Phaser.Scene {
   private decorations: Phaser.GameObjects.Sprite[] = [];
   private achievementMgr: AchievementManager = new AchievementManager();
@@ -18,8 +63,40 @@ export class MenuScene extends Phaser.Scene {
   // UI containers (arrays of GameObjects for cleanup)
   private uiElements: Phaser.GameObjects.GameObject[] = [];
 
+  // UI Config
+  private cfg!: UIConfig;
+
   constructor() {
     super({ key: 'MenuScene' });
+  }
+
+  private initConfig(): void {
+    const isDesktop = this.sys.game.device.os.desktop;
+    this.cfg = {
+      isDesktop,
+      spacing: {
+        xl: isDesktop ? 40 : 30,
+        l: isDesktop ? 30 : 20,
+        m: isDesktop ? 20 : 16,
+        s: isDesktop ? 12 : 8,
+        xs: isDesktop ? 6 : 4,
+      },
+      font: {
+        h1: isDesktop ? 40 : 30,
+        h2: isDesktop ? 24 : 18,
+        h3: isDesktop ? 16 : 13,
+        body: isDesktop ? 14 : 11,
+        caption: isDesktop ? 12 : 10,
+      },
+      btnWidth: isDesktop ? 200 : 160,
+      btnHeight: isDesktop ? 40 : 34,
+      modeCardW: isDesktop ? 180 : 130,
+      modeCardH: isDesktop ? 120 : 100,
+      charCardW: isDesktop ? 220 : 160,
+      charCardH: isDesktop ? 200 : 170,
+      cardGap: isDesktop ? 20 : 12,
+      previewScale: isDesktop ? 3 : 2.2,
+    };
   }
 
   create(): void {
@@ -27,6 +104,7 @@ export class MenuScene extends Phaser.Scene {
     this.currentScreen = 'main';
     this.selectedMode = 'classic';
     this.selectedChar = 'warrior';
+    this.initConfig();
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -50,16 +128,6 @@ export class MenuScene extends Phaser.Scene {
       });
     }
 
-    // Title (always visible)
-    this.add.text(w / 2, 35, '像素幸存者', {
-      fontSize: '32px', fontFamily: '"Courier New", monospace', color: '#ffcc44',
-      stroke: '#886622', strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(10);
-
-    this.add.text(w / 2, 62, 'PIXEL SURVIVOR', {
-      fontSize: '12px', fontFamily: '"Courier New", monospace', color: '#888888',
-    }).setOrigin(0.5).setDepth(10);
-
     this.showMainScreen();
   }
 
@@ -77,17 +145,40 @@ export class MenuScene extends Phaser.Scene {
     this.currentScreen = 'main';
     const w = this.scale.width;
     const h = this.scale.height;
+    const c = this.cfg;
 
-    const startY = 110;
-    const btnGap = 55;
+    // Calculate total content height for vertical centering
+    // Title + subtitle + XL gap + button1 + L gap + button2 + L gap + records
+    const titleBlockH = c.font.h1 + c.spacing.s + c.font.caption;
+    const btnBlockH = c.btnHeight + c.spacing.l + c.btnHeight;
+    const recordsH = c.font.caption;
+    const totalContentH = titleBlockH + c.spacing.xl + btnBlockH + c.spacing.l + recordsH;
+    const contentTop = (h - totalContentH) / 2;
 
-    this.createMenuButton(w / 2, startY, '开始游戏', 0x44aaff, () => this.showModeSelect());
-    this.createMenuButton(w / 2, startY + btnGap, '成就 [' + this.achievementMgr.getUnlockedCount() + '/' + this.achievementMgr.getTotalCount() + ']', 0xffcc44, () => this.showAchievements());
+    // Title
+    const titleY = contentTop + c.font.h1 / 2;
+    this.addText(w / 2, titleY, '像素幸存者', COLORS.title, c.font.h1)
+      .setOrigin(0.5)
+      .setDepth(10)
+      .setStroke('#886622', 4);
+
+    // Subtitle
+    const subtitleY = contentTop + c.font.h1 + c.spacing.s + c.font.caption / 2;
+    this.addText(w / 2, subtitleY, 'PIXEL SURVIVOR', COLORS.caption, c.font.caption)
+      .setOrigin(0.5)
+      .setDepth(10);
+
+    // Buttons
+    const btn1Y = contentTop + titleBlockH + c.spacing.xl + c.btnHeight / 2;
+    const btn2Y = btn1Y + c.btnHeight / 2 + c.spacing.l + c.btnHeight / 2;
+    this.createButton(w / 2, btn1Y, '开始游戏', COLORS.btnPrimary, () => this.showModeSelect());
+    this.createButton(w / 2, btn2Y, '成就 [' + this.achievementMgr.getUnlockedCount() + '/' + this.achievementMgr.getTotalCount() + ']', COLORS.title, () => this.showAchievements());
 
     // Best records
     const rec = this.achievementMgr.getRecords();
-    const recordsY = startY + btnGap * 2 + 20;
-    this.addText(w / 2, recordsY, `最高存活: ${this.fmtTime(rec.bestTime)}  |  最多击杀: ${rec.bestKills}  |  最高等级: Lv.${rec.bestLevel}`, '#666666', 10).setOrigin(0.5);
+    const recordsY = btn2Y + c.btnHeight / 2 + c.spacing.l + recordsH / 2;
+    this.addText(w / 2, recordsY, `最高存活: ${this.fmtTime(rec.bestTime)}  |  最多击杀: ${rec.bestKills}  |  最高等级: Lv.${rec.bestLevel}`, COLORS.caption, c.font.caption)
+      .setOrigin(0.5);
   }
 
   // ─── Mode Select ─────────────────────────────────────────
@@ -96,26 +187,37 @@ export class MenuScene extends Phaser.Scene {
     this.currentScreen = 'mode_select';
     const w = this.scale.width;
     const h = this.scale.height;
-
-    this.addText(w / 2, 95, '选择模式', '#ffffff', 18);
+    const c = this.cfg;
 
     const modes = GAME_MODE_TYPES;
-    const cardW = 160;
-    const cardH = 100;
-    const gap = 15;
-    const totalW = modes.length * cardW + (modes.length - 1) * gap;
-    const startX = (w - totalW) / 2 + cardW / 2;
-    const cardY = 170;
+    const cardW = c.modeCardW;
+    const cardH = c.modeCardH;
+    const totalCardsW = modes.length * cardW + (modes.length - 1) * c.cardGap;
+    const startX = (w - totalCardsW) / 2 + cardW / 2;
+
+    // Calculate total content height for vertical centering
+    // H2 title + XL gap + cards + XL gap + button1 + L gap + button2
+    const titleBlockH = c.font.h2;
+    const btnBlockH = c.btnHeight + c.spacing.l + c.btnHeight;
+    const totalContentH = titleBlockH + c.spacing.xl + cardH + c.spacing.xl + btnBlockH;
+    const contentTop = (h - totalContentH) / 2;
+
+    // Title
+    const titleY = contentTop + c.font.h2 / 2;
+    this.addText(w / 2, titleY, '选择模式', COLORS.subtitle, c.font.h2).setOrigin(0.5);
+
+    // Cards
+    const cardY = contentTop + titleBlockH + c.spacing.xl + cardH / 2;
 
     modes.forEach((modeKey, i) => {
       const mode = GAME_MODES[modeKey];
-      const cx = startX + i * (cardW + gap);
+      const cx = startX + i * (cardW + c.cardGap);
       const cy = cardY;
       const isSelected = modeKey === this.selectedMode;
 
       // Card bg
       const bg = this.add.graphics().setDepth(20);
-      bg.fillStyle(isSelected ? 0x3a3a7e : 0x1a1a3e, 0.95);
+      bg.fillStyle(isSelected ? COLORS.cardBgSelected : COLORS.cardBg, 0.95);
       bg.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
       if (isSelected) {
         bg.lineStyle(2, mode.iconColor, 0.8);
@@ -123,16 +225,30 @@ export class MenuScene extends Phaser.Scene {
       }
       this.uiElements.push(bg);
 
-      // Mode name
-      this.addText(cx, cy - 30, mode.name, '#' + mode.iconColor.toString(16).padStart(6, '0'), 13);
+      // Card content from top
+      const contentTopY = cy - cardH / 2;
+      let currentY = contentTopY + c.spacing.s;
+
+      // Mode name (H3)
+      this.addText(cx, currentY + c.font.h3 / 2, mode.name, '#' + mode.iconColor.toString(16).padStart(6, '0'), c.font.h3)
+        .setOrigin(0.5);
+      currentY += c.font.h3 + c.spacing.s;
+
       // Description
-      this.addText(cx, cy - 8, mode.description, '#aaaaaa', 9);
+      this.addText(cx, currentY + c.font.caption / 2, mode.description, COLORS.body, c.font.caption)
+        .setOrigin(0.5);
+      currentY += c.font.caption + c.spacing.s;
+
       // Time limit
       const timeStr = mode.timeLimit > 0 ? this.fmtTime(mode.timeLimit) : '无限';
-      this.addText(cx, cy + 15, `时间: ${timeStr}`, '#888888', 9);
-      // Difficulty hint
+      this.addText(cx, currentY + c.font.caption / 2, `时间: ${timeStr}`, COLORS.caption, c.font.caption)
+        .setOrigin(0.5);
+      currentY += c.font.caption + c.spacing.xs;
+
+      // Difficulty
       const diffStr = mode.enemyHpMult > 1 ? `难度: x${mode.enemyHpMult}` : '难度: 普通';
-      this.addText(cx, cy + 30, diffStr, '#888888', 9);
+      this.addText(cx, currentY + c.font.caption / 2, diffStr, COLORS.caption, c.font.caption)
+        .setOrigin(0.5);
 
       // Click area
       const hitArea = this.add.rectangle(cx, cy, cardW, cardH, 0xffffff, 0.01)
@@ -144,10 +260,11 @@ export class MenuScene extends Phaser.Scene {
       this.uiElements.push(hitArea);
     });
 
-    // Confirm button
-    this.createMenuButton(w / 2, 290, '选择角色 →', 0x44aaff, () => this.showCharSelect());
-    // Back button
-    this.createMenuButton(w / 2, 340, '← 返回', 0x888888, () => this.showMainScreen());
+    // Buttons
+    const btn1Y = cardY + cardH / 2 + c.spacing.xl + c.btnHeight / 2;
+    const btn2Y = btn1Y + c.btnHeight / 2 + c.spacing.l + c.btnHeight / 2;
+    this.createButton(w / 2, btn1Y, '选择角色 →', COLORS.btnPrimary, () => this.showCharSelect());
+    this.createButton(w / 2, btn2Y, '← 返回', COLORS.btnSecondary, () => this.showMainScreen());
   }
 
   // ─── Character Select ────────────────────────────────────
@@ -156,26 +273,36 @@ export class MenuScene extends Phaser.Scene {
     this.currentScreen = 'char_select';
     const w = this.scale.width;
     const h = this.scale.height;
-
-    this.addText(w / 2, 95, '选择角色', '#ffffff', 18);
+    const c = this.cfg;
 
     const chars = CHARACTER_TYPES;
-    const cardW = 200;
-    const cardH = 150;
-    const gap = 20;
-    const totalW = chars.length * cardW + (chars.length - 1) * gap;
-    const startX = (w - totalW) / 2 + cardW / 2;
-    const cardY = 195;
+    const cardW = c.charCardW;
+    const cardH = c.charCardH;
+    const totalCardsW = chars.length * cardW + (chars.length - 1) * c.cardGap;
+    const startX = (w - totalCardsW) / 2 + cardW / 2;
+
+    // Calculate total content height
+    const titleBlockH = c.font.h2;
+    const btnBlockH = c.btnHeight + c.spacing.l + c.btnHeight;
+    const totalContentH = titleBlockH + c.spacing.xl + cardH + c.spacing.xl + btnBlockH;
+    const contentTop = (h - totalContentH) / 2;
+
+    // Title
+    const titleY = contentTop + c.font.h2 / 2;
+    this.addText(w / 2, titleY, '选择角色', COLORS.subtitle, c.font.h2).setOrigin(0.5);
+
+    // Cards
+    const cardY = contentTop + titleBlockH + c.spacing.xl + cardH / 2;
 
     chars.forEach((charKey, i) => {
       const char = CHARACTERS[charKey];
-      const cx = startX + i * (cardW + gap);
+      const cx = startX + i * (cardW + c.cardGap);
       const cy = cardY;
       const isSelected = charKey === this.selectedChar;
 
       // Card bg
       const bg = this.add.graphics().setDepth(20);
-      bg.fillStyle(isSelected ? 0x3a3a7e : 0x1a1a3e, 0.95);
+      bg.fillStyle(isSelected ? COLORS.cardBgSelected : COLORS.cardBg, 0.95);
       bg.fillRoundedRect(cx - cardW / 2, cy - cardH / 2, cardW, cardH, 6);
       if (isSelected) {
         bg.lineStyle(2, char.iconColor, 0.8);
@@ -183,22 +310,39 @@ export class MenuScene extends Phaser.Scene {
       }
       this.uiElements.push(bg);
 
-      // Character icon (colored square)
-      const icon = this.add.graphics().setDepth(21);
-      icon.fillStyle(char.iconColor, 0.8);
-      icon.fillRoundedRect(cx - 15, cy - 55, 30, 30, 4);
-      this.uiElements.push(icon);
+      // Card content from top
+      const contentTopY = cy - cardH / 2;
+      let currentY = contentTopY + c.spacing.s;
 
-      // Name
-      this.addText(cx, cy - 15, char.name, '#' + char.iconColor.toString(16).padStart(6, '0'), 14);
+      // Character preview sprite
+      const preview = this.add.sprite(cx, currentY + 24, 'player_sheet', 0).setDepth(21).setScale(c.previewScale);
+      preview.setTint(char.bodyColor);
+      this.uiElements.push(preview);
+      currentY += 48 + c.spacing.s;
+
+      // Name (H3)
+      this.addText(cx, currentY + c.font.h3 / 2, char.name, '#' + char.iconColor.toString(16).padStart(6, '0'), c.font.h3)
+        .setOrigin(0.5);
+      currentY += c.font.h3 + c.spacing.xs;
+
       // Description
-      this.addText(cx, cy + 5, char.description, '#aaaaaa', 9);
+      this.addText(cx, currentY + c.font.caption / 2, char.description, COLORS.body, c.font.caption)
+        .setOrigin(0.5);
+      currentY += c.font.caption + c.spacing.s;
+
       // Stats
-      this.addText(cx, cy + 25, `HP:${char.maxHp}  速度:${char.speed}`, '#888888', 9);
-      this.addText(cx, cy + 40, `护甲:${Math.floor(char.armor * 100)}%  暴击:${Math.floor(char.critRate * 100)}%`, '#888888', 9);
+      this.addText(cx, currentY + c.font.caption / 2, `HP:${char.maxHp}  速度:${char.speed}`, COLORS.caption, c.font.caption)
+        .setOrigin(0.5);
+      currentY += c.font.caption + c.spacing.xs;
+
+      this.addText(cx, currentY + c.font.caption / 2, `护甲:${Math.floor(char.armor * 100)}%  暴击:${Math.floor(char.critRate * 100)}%`, COLORS.caption, c.font.caption)
+        .setOrigin(0.5);
+      currentY += c.font.caption + c.spacing.xs;
+
       // Weapon
       const weaponNames: Record<string, string> = { spinning_blade: '旋转飞刀', energy_bullet: '能量弹', lightning_chain: '闪电链', fire_bottle: '火焰瓶' };
-      this.addText(cx, cy + 55, `初始武器: ${weaponNames[char.startWeapon] || char.startWeapon}`, '#88ccff', 9);
+      this.addText(cx, currentY + c.font.caption / 2, `初始武器: ${weaponNames[char.startWeapon] || char.startWeapon}`, '#88ccff', c.font.caption)
+        .setOrigin(0.5);
 
       // Click area
       const hitArea = this.add.rectangle(cx, cy, cardW, cardH, 0xffffff, 0.01)
@@ -210,11 +354,12 @@ export class MenuScene extends Phaser.Scene {
       this.uiElements.push(hitArea);
     });
 
-    // Start button
+    // Buttons
+    const btn1Y = cardY + cardH / 2 + c.spacing.xl + c.btnHeight / 2;
+    const btn2Y = btn1Y + c.btnHeight / 2 + c.spacing.l + c.btnHeight / 2;
     const modeName = GAME_MODES[this.selectedMode].name;
-    this.createMenuButton(w / 2, 310, `开始! (${modeName})`, 0x44ff44, () => this.startGame());
-    // Back button
-    this.createMenuButton(w / 2, 360, '← 返回', 0x888888, () => this.showModeSelect());
+    this.createButton(w / 2, btn1Y, `开始! (${modeName})`, COLORS.btnAccent, () => this.startGame());
+    this.createButton(w / 2, btn2Y, '← 返回', COLORS.btnSecondary, () => this.showModeSelect());
   }
 
   // ─── Achievements Screen ─────────────────────────────────
@@ -223,40 +368,63 @@ export class MenuScene extends Phaser.Scene {
     this.currentScreen = 'achievements';
     const w = this.scale.width;
     const h = this.scale.height;
-
-    this.addText(w / 2, 95, '成就', '#ffcc44', 18);
+    const c = this.cfg;
 
     const count = this.achievementMgr.getUnlockedCount();
     const total = this.achievementMgr.getTotalCount();
-    this.addText(w / 2, 118, `${count} / ${total}`, '#aaaaaa', 12);
 
-    // Achievement list (scrollable area)
-    const listY = 145;
+    // Calculate list height
     const achs = this.achievementMgr.getUnlockedCount() > 0
       ? this.achievementMgr.getAllUnlocked()
       : [];
+    const maxShow = Math.min(achs.length, 6);
+    const listItemH = c.font.body + c.spacing.s;
+    const listH = achs.length === 0
+      ? c.font.body * 2 + c.spacing.m
+      : maxShow * listItemH + (achs.length > maxShow ? c.font.caption + c.spacing.s : 0);
+
+    // Calculate total content height
+    const titleBlockH = c.font.h2 + c.spacing.xs + c.font.caption;
+    const btnBlockH = c.btnHeight;
+    const totalContentH = titleBlockH + c.spacing.xl + listH + c.spacing.xl + btnBlockH;
+    const contentTop = (h - totalContentH) / 2;
+
+    // Title
+    const titleY = contentTop + c.font.h2 / 2;
+    this.addText(w / 2, titleY, '成就', COLORS.title, c.font.h2).setOrigin(0.5);
+
+    // Counter
+    const counterY = titleY + c.font.h2 / 2 + c.spacing.xs + c.font.caption / 2;
+    this.addText(w / 2, counterY, `${count} / ${total}`, COLORS.body, c.font.caption).setOrigin(0.5);
+
+    // List
+    const listTop = contentTop + titleBlockH + c.spacing.xl;
 
     if (achs.length === 0) {
-      this.addText(w / 2, listY + 60, '还没有解锁任何成就', '#666666', 11);
-      this.addText(w / 2, listY + 80, '去游戏中挑战吧!', '#666666', 11);
+      this.addText(w / 2, listTop + c.font.body, '还没有解锁任何成就', COLORS.caption, c.font.body).setOrigin(0.5);
+      this.addText(w / 2, listTop + c.font.body * 2 + c.spacing.m, '去游戏中挑战吧!', COLORS.caption, c.font.body).setOrigin(0.5);
     } else {
-      // Show unlocked achievements
-      const maxShow = Math.min(achs.length, 6);
       for (let i = 0; i < maxShow; i++) {
         const achData = ACHIEVEMENTS.find(a => a.id === achs[i].id);
         if (!achData) continue;
-        const y = listY + 10 + i * 28;
-        this.addText(w / 2 - 120, y, '★', '#' + achData.iconColor.toString(16).padStart(6, '0'), 14);
-        this.addText(w / 2 - 100, y, achData.name, '#ffffff', 11);
-        this.addText(w / 2 + 120, y, achData.description, '#888888', 9).setOrigin(1, 0);
+        const y = listTop + i * listItemH + c.font.body / 2;
+        this.addText(w / 2 - 120, y, '★', '#' + achData.iconColor.toString(16).padStart(6, '0'), c.font.h3)
+          .setOrigin(0.5);
+        this.addText(w / 2 - 100, y, achData.name, COLORS.subtitle, c.font.body)
+          .setOrigin(0, 0.5);
+        this.addText(w / 2 + 120, y, achData.description, COLORS.caption, c.font.caption)
+          .setOrigin(1, 0.5);
       }
       if (achs.length > maxShow) {
-        this.addText(w / 2, listY + 10 + maxShow * 28 + 10, `...还有 ${achs.length - maxShow} 个成就`, '#666666', 10);
+        const moreY = listTop + maxShow * listItemH + c.font.caption / 2;
+        this.addText(w / 2, moreY, `...还有 ${achs.length - maxShow} 个成就`, COLORS.caption, c.font.caption)
+          .setOrigin(0.5);
       }
     }
 
     // Back button
-    this.createMenuButton(w / 2, 370, '← 返回', 0x888888, () => this.showMainScreen());
+    const btnY = contentTop + titleBlockH + c.spacing.xl + listH + c.spacing.xl + c.btnHeight / 2;
+    this.createButton(w / 2, btnY, '← 返回', COLORS.btnSecondary, () => this.showMainScreen());
   }
 
   // ─── Start Game ──────────────────────────────────────────
@@ -276,11 +444,13 @@ export class MenuScene extends Phaser.Scene {
     return t;
   }
 
-  private createMenuButton(x: number, y: number, text: string, color: number | string, callback: () => void): void {
+  private createButton(x: number, y: number, text: string, color: number | string, callback: () => void): void {
+    const c = this.cfg;
     const colorStr = typeof color === 'number' ? '#' + color.toString(16).padStart(6, '0') : color;
+    const bw = c.btnWidth;
+    const bh = c.btnHeight;
+
     const bg = this.add.graphics().setDepth(20);
-    const bw = 180;
-    const bh = 32;
     bg.fillStyle(0x334466, 0.9);
     bg.fillRoundedRect(x - bw / 2, y - bh / 2, bw, bh, 6);
     bg.fillStyle(0x446688, 0.7);
@@ -288,7 +458,7 @@ export class MenuScene extends Phaser.Scene {
     this.uiElements.push(bg);
 
     const label = this.add.text(x, y, text, {
-      fontSize: '14px', fontFamily: '"Courier New", monospace', color: colorStr,
+      fontSize: `${c.font.body}px`, fontFamily: '"Courier New", monospace', color: colorStr,
     }).setOrigin(0.5).setDepth(21);
     this.uiElements.push(label);
 
