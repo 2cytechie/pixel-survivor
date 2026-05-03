@@ -40,8 +40,17 @@ export class PixelAssets {
     for (let i = 0; i < frames.length; i++) {
       frames[i](g, i * frameW);
     }
-    g.generateTexture(key, frameW * frames.length, frameH);
+    const totalW = frameW * frames.length;
+    g.generateTexture(key, totalW, frameH);
     g.destroy();
+
+    // Register frames so Phaser's animation system can use generateFrameNumbers
+    const texture = this.scene.textures.get(key);
+    if (texture && Object.keys(texture.frames).length <= 1) {
+      for (let i = 0; i < frames.length; i++) {
+        texture.add(i, 0, i * frameW, 0, frameW, frameH);
+      }
+    }
   }
 
   // ─── Player ────────────────────────────────────────────
