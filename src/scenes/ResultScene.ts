@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { formatTime } from '../utils/MathUtils';
+import { GameMode, CharacterType, GAME_MODES, CHARACTERS } from '../config/GameData';
 
 interface ResultData {
   won: boolean;
@@ -7,6 +8,9 @@ interface ResultData {
   kills: number;
   level: number;
   gold: number;
+  mode?: GameMode;
+  character?: CharacterType;
+  bossKills?: number;
 }
 
 export class ResultScene extends Phaser.Scene {
@@ -41,6 +45,15 @@ export class ResultScene extends Phaser.Scene {
       color: '#888888',
     }).setOrigin(0.5);
 
+    // Mode & Character info
+    const modeName = data.mode ? GAME_MODES[data.mode].name : '经典模式';
+    const charName = data.character ? CHARACTERS[data.character].name : '战士';
+    this.add.text(w / 2, h * 0.30, `${modeName} | ${charName}`, {
+      fontSize: '11px',
+      fontFamily: '"Courier New", monospace',
+      color: '#aaaaaa',
+    }).setOrigin(0.5);
+
     // Stats panel background
     const panelBg = this.add.graphics();
     panelBg.fillStyle(0x1a1a3e, 0.9);
@@ -54,6 +67,7 @@ export class ResultScene extends Phaser.Scene {
       { label: '击杀数', value: data.kills.toString(), color: '#ff8888' },
       { label: '达到等级', value: `Lv.${data.level}`, color: '#ffcc44' },
       { label: '获得金币', value: data.gold.toString(), color: '#ffcc44' },
+      { label: 'BOSS击杀', value: (data.bossKills || 0).toString(), color: '#ff8844' },
     ];
 
     stats.forEach((stat, i) => {

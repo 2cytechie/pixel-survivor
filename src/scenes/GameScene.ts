@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { GameConfig } from '../config/GameConfig';
 import {
-  WeaponType, EnemyType, PassiveType,
-  WEAPONS, ENEMIES, PASSIVES,
+  WeaponType, EnemyType, PassiveType, GameMode, CharacterType,
+  WEAPONS, ENEMIES, PASSIVES, GAME_MODES, CHARACTERS,
   WEAPON_TYPES, ENEMY_TYPES, PASSIVE_TYPES,
   getEnemyPool, expToLevel,
 } from '../config/GameData';
@@ -12,6 +12,7 @@ import { PickupItem, PickupType } from '../entities/PickupItem';
 import { FloatingText } from '../entities/FloatingText';
 import { WeaponManager } from '../systems/WeaponManager';
 import { MusicManager } from '../systems/MusicManager';
+import { AchievementManager } from '../systems/AchievementManager';
 import { SpatialHash } from '../utils/SpatialHash';
 import { randInt, pickRandom, formatTime, clamp } from '../utils/MathUtils';
 
@@ -58,8 +59,18 @@ export class GameScene extends Phaser.Scene {
   private isGameOver: boolean = false;
   private totalKills: number = 0;
   private totalGold: number = 0;
+  private totalBossKills: number = 0;
   private spawnTimer: number = 0;
   private lastBossTime: number = 0;
+
+  // Mode & Character
+  private gameMode: GameMode = 'classic';
+  private characterType: CharacterType = 'warrior';
+  private achievementMgr: AchievementManager = new AchievementManager();
+
+  // Boss Rush state
+  private bossRushWave: number = 0;
+  private bossRushAlive: number = 0;
 
   // Music
   private musicManager: MusicManager = new MusicManager();
@@ -78,19 +89,30 @@ export class GameScene extends Phaser.Scene {
 
   // ==================== CREATE ====================
 
-  create(): void {
+  create(data?: { mode?: string; character?: string }): void {
+    // Parse mode and character from scene data
+    this.gameMode = (data?.mode as GameMode) || 'classic';
+    this.characterType = (data?.character as CharacterType) || 'warrior';
+    const modeData = GAME_MODES[this.gameMode];
+    const charData = CHARACTERS[this.characterType];
+
     this.isMobile = !this.sys.game.device.os.desktop;
     this.gameTime = 0;
     this.isPaused = false;
     this.isGameOver = false;
     this.totalKills = 0;
     this.totalGold = 0;
+    this.totalBossKills = 0;
     this.spawnTimer = 0;
     this.lastBossTime = 0;
+    this.bossRushWave = 0;
+    this.bossRushAlive = 0;
     this.enemies = [];
     this.projectiles = [];
     this.pickups = [];
     this.floatingTexts = [];
+
+    this.achievementMgr.load();
 
     this.createBackground();
     this.createPlayer();
@@ -101,8 +123,12 @@ export class GameScene extends Phaser.Scene {
       this.createJoystick();
     }
 
-    // Initial weapon
-    this.weaponManager.addWeapon('spinning_blade');
+    // Initial weapon (based on character)
+    this.weaponManager.addWeapon(charData.startWeapon);
+
+    // Apply character bonus passive
+    this.applyPassive(charData.bonusPassive);
+    this.applyPassive(charData.bonusPassive); // Apply twice for bonusPassiveLevel=2
 
     // Start BGM
     this.musicManager.play();
@@ -153,7 +179,22 @@ export class GameScene extends Phaser.Scene {
   // ==================== PLAYER ====================
 
   private createPlayer(): void {
+    const charData = CHARACTERS[this.characterType];
     this.player = new Player(this, GameConfig.MAP.WIDTH / 2, GameConfig.MAP.HEIGHT / 2);
+
+    // Apply character stats
+    this.player.maxHp = charData.maxHp;
+    this.player.hp = charData.maxHp;
+    this.player.speed = charData.speed;
+    this.player.armor = charData.armor;
+    this.player.regen = charData.regen;
+    this.player.critRate = charData.critRate;
+    this.player.critDamage = charData.critDamage;
+    this.player.cooldownReduction = charData.cooldownReduction;
+
+    // Tint player based on character color
+    this.player.setTint(charData.bodyColor);
+
     this.player.setDepth(10);
     this.weaponManager = new WeaponManager(this, this.player);
     this.spatialHash = new SpatialHash(64);
@@ -354,9 +395,14 @@ export class GameScene extends Phaser.Scene {
     // Level
     this.levelText.setText(`Lv.${this.player.level}`);
 
-    // Time (countdown)
-    const remaining = Math.max(0, GameConfig.LEVEL.DURATION - this.gameTime);
-    this.timeText.setText(formatTime(remaining));
+    // Time (countdown for timed modes, elapsed for endless)
+    const modeData = GAME_MODES[this.gameMode];
+    if (modeData.timeLimit > 0) {
+      const remaining = Math.max(0, modeData.timeLimit - this.gameTime);
+      this.timeText.setText(formatTime(remaining));
+    } else {
+      this.timeText.setText(formatTime(this.gameTime));
+    }
 
     // Kills
     this.killText.setText(`击杀: ${this.totalKills}`);
@@ -427,8 +473,9 @@ export class GameScene extends Phaser.Scene {
       this.gameOver();
     }
 
-    // Check victory
-    if (this.gameTime >= GameConfig.LEVEL.DURATION) {
+    // Check victory (only for timed modes)
+    const modeData = GAME_MODES[this.gameMode];
+    if (modeData.timeLimit > 0 && this.gameTime >= modeData.timeLimit) {
       this.victory();
     }
   }
@@ -590,10 +637,30 @@ export class GameScene extends Phaser.Scene {
   // ==================== SPAWNING ====================
 
   private updateSpawning(): void {
+    const modeData = GAME_MODES[this.gameMode];
+
+    // Boss Rush mode: only spawn boss waves
+    if (this.gameMode === 'boss_rush') {
+      if (this.bossRushAlive <= 0) {
+        this.bossRushWave++;
+        const bossCount = Math.min(this.bossRushWave, 5);
+        for (let i = 0; i < bossCount; i++) {
+          this.spawnEnemy('boss_slime');
+          this.bossRushAlive++;
+        }
+      }
+      return;
+    }
+
+    // No normal spawning if spawnRateMult is 0
+    if (modeData.spawnRateMult <= 0) return;
+
     // Dynamic spawn interval based on time
-    const progress = Math.min(1, this.gameTime / GameConfig.LEVEL.DURATION);
-    const interval = GameConfig.ENEMY.SPAWN_INTERVAL_INITIAL -
+    const timeRef = modeData.timeLimit > 0 ? modeData.timeLimit : 600;
+    const progress = Math.min(1, this.gameTime / timeRef);
+    const baseInterval = GameConfig.ENEMY.SPAWN_INTERVAL_INITIAL -
       (GameConfig.ENEMY.SPAWN_INTERVAL_INITIAL - GameConfig.ENEMY.SPAWN_INTERVAL_MIN) * progress;
+    const interval = baseInterval / modeData.spawnRateMult;
 
     if (this.spawnTimer < interval) return;
     this.spawnTimer = 0;
@@ -607,14 +674,15 @@ export class GameScene extends Phaser.Scene {
       this.spawnEnemy();
     }
 
-    // Boss every 60 seconds
-    if (this.gameTime - this.lastBossTime >= 60 && this.gameTime > 30) {
+    // Boss spawning
+    if (modeData.bossInterval > 0 && this.gameTime - this.lastBossTime >= modeData.bossInterval && this.gameTime > 30) {
       this.lastBossTime = this.gameTime;
       this.spawnEnemy('boss_slime');
     }
   }
 
   private spawnEnemy(type?: EnemyType): void {
+    const modeData = GAME_MODES[this.gameMode];
     const pool = type ? [type] : getEnemyPool(this.gameTime);
     const enemyType = pickRandom(pool);
     const data = ENEMIES[enemyType];
@@ -631,11 +699,13 @@ export class GameScene extends Phaser.Scene {
     x = clamp(x, 32, GameConfig.MAP.WIDTH - 32);
     y = clamp(y, 32, GameConfig.MAP.HEIGHT - 32);
 
-    // Scale enemy stats with game time
+    // Scale enemy stats with game time and mode multipliers
     const scaledData = { ...data };
-    const scaleFactor = 1 + (this.gameTime / GameConfig.LEVEL.DURATION) * 2;
-    scaledData.hp = Math.floor(data.hp * scaleFactor);
-    scaledData.damage = Math.floor(data.damage * (1 + this.gameTime / GameConfig.LEVEL.DURATION));
+    const timeRef = modeData.timeLimit > 0 ? modeData.timeLimit : 600;
+    const scaleFactor = 1 + (this.gameTime / timeRef) * 2;
+    scaledData.hp = Math.floor(data.hp * scaleFactor * modeData.enemyHpMult);
+    scaledData.damage = Math.floor(data.damage * (1 + this.gameTime / timeRef) * modeData.enemyHpMult);
+    scaledData.speed = data.speed * modeData.enemySpeedMult;
 
     const enemy = new Enemy(this, x, y, scaledData);
     enemy.setDepth(5);
@@ -647,6 +717,12 @@ export class GameScene extends Phaser.Scene {
 
   onEnemyKilled(enemy: Enemy): void {
     this.totalKills++;
+
+    // Track boss kills
+    if (enemy.enemyType === 'boss_slime') {
+      this.totalBossKills++;
+      this.bossRushAlive = Math.max(0, this.bossRushAlive - 1);
+    }
 
     // Drop loot
     // Always drop exp gem
@@ -1073,12 +1149,16 @@ export class GameScene extends Phaser.Scene {
 
     this.time.delayedCall(2000, () => {
       text.destroy();
+      this.checkAndSaveAchievements(false);
       this.scene.start('ResultScene', {
         won: false,
         time: this.gameTime,
         kills: this.totalKills,
         level: this.player.level,
         gold: this.totalGold,
+        mode: this.gameMode,
+        character: this.characterType,
+        bossKills: this.totalBossKills,
       });
     });
   }
@@ -1102,14 +1182,36 @@ export class GameScene extends Phaser.Scene {
 
     this.time.delayedCall(2000, () => {
       text.destroy();
+      this.checkAndSaveAchievements(true);
       this.scene.start('ResultScene', {
         won: true,
         time: this.gameTime,
         kills: this.totalKills,
         level: this.player.level,
         gold: this.totalGold,
+        mode: this.gameMode,
+        character: this.characterType,
+        bossKills: this.totalBossKills,
       });
     });
+  }
+
+  // ==================== ACHIEVEMENTS ====================
+
+  private checkAndSaveAchievements(won: boolean): void {
+    const newAchs = this.achievementMgr.checkAchievements({
+      mode: this.gameMode,
+      character: this.characterType,
+      time: this.gameTime,
+      kills: this.totalKills,
+      level: this.player.level,
+      gold: this.totalGold,
+      bossKills: this.totalBossKills,
+      won,
+    });
+    if (newAchs.length > 0) {
+      console.log(`🏆 解锁成就: ${newAchs.map(a => a.name).join(', ')}`);
+    }
   }
 
   // ==================== CLEANUP ====================
